@@ -1,13 +1,13 @@
 import os
+import requests
+from flask import Flask, request
 from dotenv import load_dotenv
-
-load_dotenv()
-import asyncio
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from openai import OpenAI
 
-# ⚠️ НЕ ХАРДКОДЬ В БУДУЩЕМ — В .env
+load_dotenv()
+
+app = Flask(__name__)
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -16,36 +16,43 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1"
 )
 
+TG_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": "Ты полезный ассистент."},
-                {"role": "user", "content": user_text}
-            ]
-        )
-
-        answer = response.choices[0].message.content
-        await update.message.reply_text(answer)
-
-    except Exception as e:
-        await update.message.reply_text(f"Ошибка: {str(e)}")
-
-
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+def send_message(chat_id, text):
+    requests.post(
+        f"{TG_API}/sendMessage",
+        json={"chat_id": chat_id, "text": text}
     )
 
-    print("Bot started...")
-    app.run_polling()
+@app.route("/", methods=["GET"])
+def home():
+    return "bot is running"
 
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.get_json()
+
+    if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
+        text = data["message"].get("text", "")
+
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[
+                    {"role": "system", "content": "Ты полезный ассистент."},
+                    {"role": "user", "content": text}
+                ]
+            )
+
+            answer = response.choices[0].message.content
+
+        except Exception as e:
+            answer = "AI ошибка"
+
+        send_message(chat_id, answer)
+
+    return "ok"
 
 if __name__ == "__main__":
-    main()
+    app.run(host="0.0.0.0", port=10000)
