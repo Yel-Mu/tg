@@ -38,7 +38,7 @@ def webhook():
 
         try:
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama3-70b-8192",
                 messages=[
                     {"role": "system", "content": "Ты полезный ассистент."},
                     {"role": "user", "content": text}
